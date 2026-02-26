@@ -1,46 +1,50 @@
-#importing the necessary libraries
+import pandas as pd
 import joblib
-import matplotlib.pyplot as plt
+import os
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
-from data_preprocessing import load_and_preprocess
-import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split
+
 def train_model():
-    X_train, X_test, y_train, y_test = load_and_preprocess("data/churn.csv")
 
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X_train, y_train)
+    df = pd.read_csv("data/churn.csv")
 
-    y_pred = model.predict(X_test)
+    # Drop customer ID
+    if 'customerID' in df.columns:
+        df = df.drop('customerID', axis=1)
 
-    print("\nModel Performance")
-    print("------------------")
-    print("Accuracy:", accuracy_score(y_test, y_pred))
-    print("\nConfusion Matrix:\n", confusion_matrix(y_test, y_pred))
-    print("\nClassification Report:\n", classification_report(y_test, y_pred))
+    # Convert target
+    df['Churn'] = df['Churn'].map({'Yes': 1, 'No': 0})
 
-    # Save model
-    joblib.dump(model, "model/logistic_model.pkl")
-    print("\nModel saved successfully!")
+    # One-hot encode categorical variables
+    df = pd.get_dummies(df, drop_first=True)
 
+    # Remove missing values
+    df = df.dropna()
 
-def plot_decision_boundary(model, X, y):
-    if X.shape[1] != 2:
-        print("Decision boundary can only be plotted with 2 features.")
-        return
+    X = df.drop('Churn', axis=1)
+    y = df['Churn']
 
-    x_min, x_max = X[:, 0].min()-1, X[:, 0].max()+1
-    y_min, y_max = X[:, 1].min()-1, X[:, 1].max()+1
-    
-    xx, yy = np.meshgrid(np.linspace(x_min, x_max, 100),
-                         np.linspace(y_min, y_max, 100))
+    # Save column structure
+    os.makedirs("model", exist_ok=True)
+    joblib.dump(X.columns.tolist(), "model/columns.pkl")
 
-    Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
-    Z = Z.reshape(xx.shape)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
 
-    plt.contourf(xx, yy, Z, alpha=0.3)
-    plt.scatter(X[:, 0], X[:, 1], c=y)
-    plt.title("Decision Boundary")
-    plt.show()
+    # Create Pipeline (Scaler + Model)
+    pipeline = Pipeline([
+        ("scaler", StandardScaler()),
+        ("model", LogisticRegression(max_iter=1000))
+    ])
+
+    pipeline.fit(X_train, y_train)
+
+    joblib.dump(pipeline, "model/logistic_model.pkl")
+
+    print("Model trained and saved successfully!")
+
 if __name__ == "__main__":
     train_model()
